@@ -1,0 +1,30 @@
+[
+	{
+		"mating_id":"061050020224",
+		"male":"PB061",
+		"female":"PB050",
+		"health_checked_date":"02/01/2024",
+		"mate_from": "02/02/2024",
+		"mate_to": "06/02/2024",
+		"f_last_mate": "09/12/2023",
+		"m_last_mate": "29/11/2023",
+		"cage": "012",
+		"pregnancy_confirmed": "1",
+		"expected_birth_date": "01/03/2024",
+		"cage_prep_date": "26/02/2024"
+	},
+	{
+		"mating_id":"045089290124",
+		"male":"PB045",
+		"female":"PB089",
+		"health_checked_date":"02/01/2024",
+		"mate_from": "29/01/2024",
+		"mate_to": "03/02/2024",
+		"f_last_mate": "09/12/2023",
+		"m_last_mate": "29/11/2023",
+		"cage": "027",
+		"pregnancy_confirmed": "0",
+		"expected_birth_date": "26/02/2024",
+		"cage_prep_date": "22/02/2024"
+	}
+]

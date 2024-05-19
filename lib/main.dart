@@ -2,23 +2,28 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:test_drive/new_rabbit.dart';
+import 'package:test_drive/ToDoPage.dart';
 import 'package:test_drive/rabbit_details_page.dart';
-//import 'package:http.dart' as http;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
+  //WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pawad Bunnies',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-            seedColor: const Color.fromARGB(255, 90, 224, 241)),
+        colorScheme: ColorScheme.fromSwatch().copyWith(
+          primary: const Color.fromARGB(255, 90, 224, 241),
+          onPrimary: Colors.white,
+        ),
         useMaterial3: true,
       ),
       home: const MyHomePage(title: 'Pawad Bunnies'),
@@ -27,7 +32,7 @@ class MyApp extends StatelessWidget {
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  const MyHomePage({Key? key, required this.title}) : super(key: key);
 
   final String title;
 
@@ -36,6 +41,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
+  int _selectedIndex = 0;
   List<Rabbit> rabbits = [];
 
   @override
@@ -62,8 +68,9 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Color.fromARGB(255, 90, 224, 241),
         title: Text(widget.title),
       ),
       body: RabbitListWidget(rabbits: rabbits),
@@ -71,17 +78,68 @@ class _MyHomePageState extends State<MyHomePage> {
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(builder: (context) => const NewRabbit()),
+            MaterialPageRoute(builder: (context) => RabbitForm()),
           );
           // Handle the ADD button press, you can navigate to a new page or perform other actions.
           // For example, let's print a message to the console.
           print('ADD button pressed');
         },
+        backgroundColor: Color.fromARGB(255, 90, 224, 241),
         child: const Icon(Icons.add),
+      ),
+      bottomNavigationBar: ClipRRect(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(20.0),
+          topRight: Radius.circular(20.0),
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.lightGreenAccent,
+
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home),
+              label: 'Rabbits',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.search),
+              label: 'Todo',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person),
+              label: 'Profile',
+            ),
+          ],
+          currentIndex: _selectedIndex,
+          //selectedItemColor: Theme.of(context).colorScheme.primary,
+          onTap: (int index) {
+            setState(() {
+              _selectedIndex = index;
+            });
+            // Handle navigation based on index
+            print('Tapped index: $index');
+
+            switch (index) {
+              case 0:
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => MyApp()),
+                );
+                break;
+              case 1:
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => TodoListPage()),
+                );
+                break;
+            }
+          },
+        ),
       ),
     );
   }
 }
+
+// The Rabbit class and RabbitListWidget class remain unchanged
 
 class Rabbit {
   final String tagNo;
@@ -165,6 +223,19 @@ class PlaceholderImageWidget extends StatelessWidget {
     );
   }
 }
+
+class PlaceholderImageFemaleWidget extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Image.asset(
+      'assets/images/rabbit2.png', // Replace with your placeholder image path
+      height: 100,
+      width: 180,
+      fit: BoxFit.cover,
+    );
+  }
+}
+
 class RabbitCard extends StatelessWidget {
   final Rabbit rabbit;
 
@@ -186,14 +257,17 @@ class RabbitCard extends StatelessWidget {
                 topLeft: Radius.circular(10.0),
                 bottomLeft: Radius.circular(10.0)),
 
-            child: rabbit.images.isNotEmpty
-              ? Image.network(
-              rabbit.images[0], // You can display the first image here
-              height: 100,
-              width: 180,
-              fit: BoxFit.cover,
-            )
-            :PlaceholderImageWidget(),
+            child: rabbit.sex == "female"
+                ? PlaceholderImageFemaleWidget()
+                /*
+                Image.network(
+                    rabbit.images[0], // You can display the first image here 
+                    height: 100,
+                    width: 180,
+                    fit: BoxFit.cover,
+                  )
+                  */
+                : PlaceholderImageWidget(),
           ),
           //SizedBox(
           InkWell(

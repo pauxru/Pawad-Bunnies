@@ -1,0 +1,12 @@
+[
+{
+"tagNo":"PB019",
+"disease":"Sneezing",
+"notice_date":"04/03/2024",
+"treatment_method":"medicine",
+"medication_used": "Zenocid",
+"quarantined": true,
+"fatal": false,
+"recovery_date": "04/06/2024"
+}
+]
