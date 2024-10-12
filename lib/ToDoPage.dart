@@ -6,6 +6,7 @@ import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class Todo {
   final Map<String, dynamic> sys;
@@ -61,6 +62,8 @@ class Todo {
     };
   }
 }
+
+String APIEndpoint = "http://pawadtech.one:8080";
 
 class TodoListPage extends StatefulWidget {
   const TodoListPage({Key? key}) : super(key: key);
@@ -172,7 +175,7 @@ class _TodoListPageState extends State<TodoListPage> {
 
   Future<void> fetchTodoList() async {
     // Fetch data from the API
-    const String host = 'http://192.168.0.104:8080/tasks';
+    String host = APIEndpoint + "/tasks";
     print("URI ::: " + '$host');
 
     try {
@@ -289,7 +292,7 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   Future<void> updateDataToAPI() async {
-    const String host = 'http://192.168.0.104:8080/tasks/update';
+    String host = '$APIEndpoint/tasks/update';
     try {
       final jsonData = await readDataFromFile();
 

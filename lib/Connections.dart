@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiHandler {
-  static const String host = 'http://192.168.0.104:8080';
+  String host = "http://pawadtech.one:8080";
+  //static const String host = '${dotenv.env['API_ENDPOINT']}';
 
   Future<void> APIping() async {
     try {
@@ -59,26 +61,35 @@ class ApiHandler {
     return await APIget("/tasks");
   }
 
-  Future<void> APIpost(String uri, Map<String, dynamic> postData) async {
-    String url = '$host$uri';
-    print("URI ::: $url");
+  Future<int> APIpost(String uri, Map<String, dynamic> postData) async {
+    String url = '$host$uri'; // Ensure `host` is correctly set
+    print("POST URI ::: $url");
     print("ToPost Data ::: $postData");
+
     try {
-      var response = await http.post(
+      final response = await http.post(
         Uri.parse(url),
         headers: <String, String>{
           'Content-Type': 'application/json; charset=UTF-8',
         },
         body: jsonEncode(postData),
       );
+
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
       if (response.statusCode == 201) {
         var data = json.decode(response.body);
         print('Created Rabbit: $data');
       } else {
         print('Failed to create Rabbit: ${response.statusCode}');
+        print('Response Body: ${response.body}');
       }
+
+      return 201;
     } catch (e) {
       print('Error creating Rabbit: $e');
+      return 0;
     }
   }
 }

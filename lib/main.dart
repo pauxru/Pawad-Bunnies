@@ -1,13 +1,19 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:test_drive/new_rabbit.dart';
 import 'package:test_drive/ToDoPage.dart';
 import 'package:test_drive/rabbit_details_page.dart';
+import 'package:test_drive/profile.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:intl/intl.dart';
 
 void main() {
+  //await dotenv.load(fileName: ".env");
   //WidgetsFlutterBinding.ensureInitialized();
   runApp(const MyApp());
 }
@@ -51,18 +57,150 @@ class _MyHomePageState extends State<MyHomePage> {
     loadRabbits();
   }
 
-  Future<void> loadRabbits() async {
-    // Load JSON data from the 'assets/rabbits.json' file
-    final String jsonString =
-        await rootBundle.loadString('assets/rabbits/rabbits.json');
-    // Parse the JSON data into a list of Rabbit objects
-    final List<dynamic> jsonList = json.decode(jsonString);
-    final List<Rabbit> rabbitList =
-        jsonList.map((json) => Rabbit.fromJson(json)).toList();
+  Future<File> get _rLocalFile async {
+    // Get the directory where the app can store data
+    final directory = await getApplicationDocumentsDirectory();
+    // Return the file path for 'rabbits.json' in the document directory
+    return File('${directory.path}/rabbits.json');
+  }
 
-    setState(() {
-      rabbits = rabbitList;
+  Future<void> loadRabbits() async {
+    int localSize = 0;
+
+    try {
+      // Get the path to the local file
+      final file = await _rLocalFile;
+
+      // Check if the file exists in the internal storage directory
+      if (await file.exists()) {
+        // Read the JSON data from the file
+        String jsonString = await file.readAsString();
+        if (jsonString.isEmpty || jsonString.length < 10) {
+          print('No Data Found in local file!!');
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('No data is available locally!')),
+          );
+        } else {
+          print('Loaded data from local file: ${file.path}');
+          print('JSON String from file: $jsonString');
+
+          // Decode the JSON data
+          final jsonContent = jsonDecode(jsonString);
+
+          // Check if jsonContent is a List
+          if (jsonContent is List) {
+            // Parse the JSON data into a list of Rabbit objects
+            final List<Rabbit> rabbitList = jsonContent
+                .map<Rabbit>((json) => Rabbit.fromJson(json))
+                .toList();
+            localSize = rabbitList.length;
+
+            setState(() {
+              rabbits = rabbitList;
+            });
+
+            print('Successfully loaded $localSize rabbits from local file.');
+          } else {
+            print(
+                'Error: JSON data is not a list. Current content: $jsonContent');
+          }
+        }
+      } else {
+        print('Local file not found: ${file.path}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('First time! Welcome!!')),
+        );
+      }
+    } catch (e) {
+      print('Error loading rabbits from file: $e');
+    }
+
+    // Now, initiate the API call in the background and update the state when the response is received.
+    loadRabbits_API(localSize).then((rret) {
+      if (rret == 200) {
+        print('Rabbits loaded successfully from API and local data refreshed.');
+        //loadRabbits(); // Reload rabbits from local file to update state
+      } else {
+        print('Failed to update rabbits from API.');
+      }
     });
+  }
+
+  Future<int> loadRabbits_API(int localSize) async {
+    int serverSize = 0;
+    try {
+      // Define the API endpoint URL
+      final String apiUrl = 'http://pawadtech.one:8080/api/rabbits';
+      print('Getting Rabbits from: $apiUrl');
+
+      // Make the HTTP GET request to the API
+      final http.Response response = await http.get(Uri.parse(apiUrl));
+
+      // Check if the response is successful (status code 200)
+      if (response.statusCode == 200) {
+        print('Successfully received response: ${response.body}');
+
+        // Parse the JSON data into a list of Rabbit objects
+        final List<dynamic> jsonList = json.decode(response.body);
+
+        // Check if the JSON is a list
+        if (jsonList is List) {
+          final List<Rabbit> rabbitList =
+              jsonList.map((json) => Rabbit.fromJson(json)).toList();
+
+          // Save the data to the local file (write new data, removing old data)
+          await saveRabbitDataToFile(
+              rabbitList.map((rabbit) => rabbit.toJson()).toList());
+
+          print('Parsed rabbit data successfully: $rabbitList');
+          serverSize = rabbitList.length;
+
+          if (localSize > serverSize) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('New data available. Please refresh!')),
+            );
+          }
+        } else {
+          print('Unexpected JSON format, expected a list but got: $jsonList');
+          throw Exception('Failed to parse rabbit data, unexpected format');
+        }
+      } else {
+        // Handle the error if the response is not successful
+        print(
+            'Failed to load rabbits with status code: ${response.statusCode}');
+        throw Exception('Failed to load rabbits');
+      }
+      return response.statusCode;
+    } on FormatException catch (e) {
+      print('Error parsing JSON data: $e');
+      return -1;
+    } catch (e) {
+      // Handle any other errors that occur during the HTTP request
+      print('Unexpected error loading rabbits: $e');
+      return -2;
+    }
+  }
+
+  Future<int> saveRabbitDataToFile(List<dynamic> jsonDataList) async {
+    print('Here at saveRabbitDataToFile');
+    try {
+      // Get the local file path
+      final file = await _rLocalFile;
+
+      // If the file doesn't exist, create it
+      if (!(await file.exists())) {
+        print('File does not exist. Creating it.');
+        // Create the file
+        await file.create();
+      }
+
+      // Write the new data to the file, removing any existing content
+      await file.writeAsString(jsonEncode(jsonDataList), mode: FileMode.write);
+      print('Data written to file successfully at: ${file.path}');
+      return 0;
+    } catch (e) {
+      throw Exception('Error writing data to file: $e');
+    }
   }
 
   @override
@@ -131,6 +269,13 @@ class _MyHomePageState extends State<MyHomePage> {
                   MaterialPageRoute(builder: (context) => TodoListPage()),
                 );
                 break;
+              case 2:
+                // Navigate to the new ProfilePage when index 2 is tapped
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfilePage()),
+                );
+                break;
             }
           },
         ),
@@ -139,11 +284,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-// The Rabbit class and RabbitListWidget class remain unchanged
-
 class Rabbit {
   final String tagNo;
-  final DateTime birthday;
+  final DateTime? birthday;
   final String breed;
   final String mother;
   final String father;
@@ -158,7 +301,7 @@ class Rabbit {
 
   Rabbit({
     required this.tagNo,
-    required this.birthday,
+    this.birthday,
     required this.breed,
     required this.mother,
     required this.father,
@@ -173,21 +316,76 @@ class Rabbit {
   });
 
   factory Rabbit.fromJson(Map<String, dynamic> json) {
+    DateTime? parseDate(String? dateString) {
+      if (dateString == null) return null; // Handle null input
+
+      try {
+        return DateTime.parse(dateString);
+      } catch (e) {
+        try {
+          final DateFormat customFormat = DateFormat('dd/MM/yyyy');
+          return customFormat.parse(dateString);
+        } catch (e) {
+          print('Error parsing date: $dateString');
+          return null; // Return null if parsing fails
+        }
+      }
+    }
+
+    // Safely handle the images list
+    List<String> images = [];
+    if (json['images'] != null) {
+      if (json['images'] is List) {
+        images = List<String>.from(json['images']);
+      } else if (json['images'] is String) {
+        images = [json['images']]; // Wrap the string in a list
+        print('Warning: "images" is a String, converted to list: $images');
+      } else {
+        print(
+            'Warning: "images" is not a List or String, received: ${json['images']}');
+      }
+    } else {
+      print('Warning: "images" key is missing or null');
+    }
+
+    // Ensure required fields are present
+    if (json['tagNo'] == null) {
+      throw ArgumentError('Missing required field: tagNo');
+    }
+
     return Rabbit(
       tagNo: json['tagNo'],
-      birthday: DateTime.parse(json['birthday']),
-      breed: json['breed'],
-      mother: json['mother'],
-      father: json['father'],
-      sex: json['sex'],
-      origin: json['origin'],
-      diseases: json['diseases'],
-      comments: json['comments'],
-      weight: json['weight'],
-      priceSold: json['price_sold'],
-      cage: json['cage'],
-      images: List<String>.from(json['images']),
+      birthday: parseDate(json['birthday']),
+      breed: json['breed'] ?? 'Unknown', // Provide default value if missing
+      mother: json['mother'] ?? 'Unknown', // Provide default value if missing
+      father: json['father'] ?? 'Unknown', // Provide default value if missing
+      sex: json['sex'] ?? 'Unknown', // Provide default value if missing
+      origin: json['origin'] ?? 'Unknown', // Provide default value if missing
+      diseases: json['diseases'] ?? 'None', // Provide default value if missing
+      comments: json['comments'] ?? '', // Provide default value if missing
+      weight: json['weight'] ?? '0', // Provide default value if missing
+      priceSold: json['price_sold'] ?? '0', // Provide default value if missing
+      cage: json['cage'] ?? 'Unknown', // Provide default value if missing
+      images: images,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'tagNo': tagNo,
+      'birthday': birthday?.toIso8601String(), // Convert DateTime to String
+      'breed': breed,
+      'mother': mother,
+      'father': father,
+      'sex': sex,
+      'origin': origin,
+      'diseases': diseases,
+      'comments': comments,
+      'weight': weight,
+      'price_sold': priceSold, // Use consistent naming with API
+      'cage': cage,
+      'images': images,
+    };
   }
 }
 
@@ -257,7 +455,7 @@ class RabbitCard extends StatelessWidget {
                 topLeft: Radius.circular(10.0),
                 bottomLeft: Radius.circular(10.0)),
 
-            child: rabbit.sex == "female"
+            child: rabbit.sex == "female" || rabbit.sex == "Female"
                 ? PlaceholderImageFemaleWidget()
                 /*
                 Image.network(
@@ -337,7 +535,10 @@ class RabbitCard extends StatelessWidget {
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                '${((DateTime.now().difference(rabbit.birthday).inDays) / 30).toStringAsFixed(1)} : ${rabbit.sex}',
+                // Check if rabbit.birthday is null, if so, display "N/A"
+                rabbit.birthday != null
+                    ? '${((DateTime.now().difference(rabbit.birthday!).inDays) / 30).toStringAsFixed(1)} months : ${rabbit.sex}'
+                    : 'N/A : ${rabbit.sex}', // Handle null birthday gracefully
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.normal,
