@@ -1,12 +1,14 @@
 import 'dart:convert';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 import 'Connections.dart';
 import 'dart:io';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:test_drive/AppConfig.dart';
 
 class Todo {
   final Map<String, dynamic> sys;
@@ -63,7 +65,7 @@ class Todo {
   }
 }
 
-String APIEndpoint = "http://pawadtech.one:8080";
+final APIEndpoint = AppConfig().API_ENDPOINT_GLOBAL;
 
 class TodoListPage extends StatefulWidget {
   const TodoListPage({Key? key}) : super(key: key);
@@ -91,32 +93,28 @@ class _TodoListPageState extends State<TodoListPage> {
 
   Future<void> initSharedPreferences() async {
     prefs = await SharedPreferences.getInstance();
-    final lastClickTime = prefs.getInt('last_click_time');
-    if (lastClickTime != null) {
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final durationUntilMidnight = Duration(milliseconds: lastClickTime - now);
-      if (durationUntilMidnight.inMilliseconds > 0) {
-        isButtonVisible = false; // Button should remain hidden until midnight
-        scheduleVisibilityUpdate(durationUntilMidnight);
-      } else {
-        isButtonVisible = true; // Button should be visible
-      }
+    final now = DateTime.now();
+
+    // Calculate the time remaining until the next midnight
+    final nextMidnight = DateTime(now.year, now.month, now.day + 1);
+    final durationUntilMidnight = nextMidnight.difference(now);
+
+    // Check if the current time is past midnight
+    if (now.hour == 0 && now.minute == 0) {
+      isButtonVisible = true; // Show the button at midnight
     } else {
-      isButtonVisible = true; // Button should be visible
+      isButtonVisible = false; // Hide the button otherwise
+      scheduleVisibilityUpdate(
+          durationUntilMidnight); // Schedule update for midnight
     }
+
     setState(() {});
   }
 
   void scheduleVisibilityUpdate(Duration duration) {
-    final now = DateTime.now();
-    final midnight =
-        DateTime(now.year, now.month, now.day + 1); // Next midnight
-
-    prefs.setInt('last_click_time', midnight.millisecondsSinceEpoch);
-
     Future.delayed(duration, () {
       setState(() {
-        isButtonVisible = true; // Show the button after the specified duration
+        isButtonVisible = true;
       });
     });
   }
@@ -172,36 +170,137 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-
   Future<void> fetchTodoList() async {
     // Fetch data from the API
     String host = APIEndpoint + "/tasks";
     print("URI ::: " + '$host');
 
     try {
-      // Set a timeout duration in milliseconds (e.g., 5 seconds)
-      const int timeoutDuration = 5000;
+      final jsonData = await readDataFromFile();
 
-      // Replace the URL with your actual API endpoint and add the timeout parameter
+      // Filter out tasks that are already closed
+      final filteredData =
+          jsonData.where((item) => item['closed'] == true).toList();
+
+      if (filteredData.isNotEmpty) {
+        // Show a warning dialog if there are closed tasks
+        showDialog(
+          context: context,
+          barrierDismissible: false, // User must tap a button to dismiss
+          builder: (BuildContext dialogContext) {
+            return AlertDialog(
+              title: const Text(
+                'Warning!!',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20.0,
+                    color: Colors.black),
+              ),
+              content: Text(
+                'There are ${filteredData.length} task(s) are already done! If you continue, they tasks will be lost and not saved. Cancel to go back',
+                style: const TextStyle(
+                  fontSize: 16.0,
+                  color: Colors.black87,
+                ),
+              ),
+              actionsPadding: const EdgeInsets.symmetric(horizontal: 10.0),
+              actions: <Widget>[
+                // Cancel button with custom style
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    ),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 18.0,
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () {
+                      // Close the dialog and cancel action
+                      Navigator.of(dialogContext).pop();
+                    },
+                  ),
+                ),
+                const SizedBox(height: 10), // Add space between buttons
+                // Continue button with custom style
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12.0),
+                    ),
+                    child: const Text(
+                      'Continue Anyway',
+                      style: TextStyle(
+                        fontSize: 18.0,
+                        color: Colors.black,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () {
+                      // Close the dialog and perform the continue action
+                      Navigator.of(dialogContext).pop();
+                      performActionAfterContinue(); // Custom action for "Continue"
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      } else if (jsonData.length == 0) {
+        performActionAfterContinue();
+      } else {
+        // Handle case where no closed tasks are present (optional)
+        print("No closed tasks found.");
+      }
+    } catch (e) {
+      throw Exception('Error fetching data: $e');
+    }
+  }
+
+  Future<void> performActionAfterContinue() async {
+    // Custom logic for continue action
+    print("User chose to continue.");
+
+    String host = APIEndpoint + "/tasks";
+
+    // Set a timeout duration in milliseconds (e.g., 5 seconds)
+    const int timeoutDuration = 5000;
+
+    try {
+      // Make the API call
       final response = await http
           .get(Uri.parse(host), headers: {'timeout': '$timeoutDuration'});
 
       if (response.statusCode == 200) {
         final jsonData = jsonDecode(response.body);
 
-        // Save JSON data to a file
-        await saveDataToFile(jsonData); // Call the saveDataToFile function
+        // Save the fetched JSON data to a local file
+        await saveDataToFile(jsonData);
 
         // Optionally, update the UI with the fetched data
         setState(() {
           todoList =
               List<Todo>.from(jsonData.map((item) => Todo.fromJson(item)));
         });
+
+        print("API data successfully fetched and stored.");
       } else {
         throw Exception('Failed to fetch data: ${response.statusCode}');
       }
     } catch (e) {
-      throw Exception('Error fetching data: $e');
+      // Handle the exception
+      print("Error occurred while fetching data: $e");
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Error: Unable to fetch data')));
     }
   }
 
@@ -223,7 +322,7 @@ class _TodoListPageState extends State<TodoListPage> {
       final filteredData =
           jsonData.where((item) => item['closed'] == false).toList();
 
-      if (filteredData.length == 1) {
+      if (filteredData.length == 0) {
         setState(() {
           isButtonVisible = true; // Show the refresh button
         });
@@ -241,9 +340,25 @@ class _TodoListPageState extends State<TodoListPage> {
   }
 
   Future<List<dynamic>> readDataFromFile() async {
-    final file = await _f_localFile;
-    final fileData = await file.readAsString(encoding: utf8);
-    return jsonDecode(fileData);
+    try {
+      final file = await _f_localFile;
+
+      // Check if the file exists
+      if (!(await file.exists())) {
+        // If the file doesn't exist, create it with default data
+        final defaultData = []; // You can customize this with your default data
+        await file.writeAsString(jsonEncode(defaultData));
+      }
+
+      // Read the file and decode JSON data
+      final fileData = await file.readAsString(encoding: utf8);
+      return jsonDecode(fileData);
+    } catch (e) {
+      // Handle any exceptions (e.g., file not found, permission issues)
+      print('Error reading data from file: $e');
+      // Return an empty list or handle as needed
+      return [];
+    }
   }
 
   Future<File> get _f_localFile async {
@@ -253,7 +368,8 @@ class _TodoListPageState extends State<TodoListPage> {
   //////////////////////////////////////////////
 
   // Update Todo by taskRef
-  void updateTodoByTaskRef(String taskRef, String comments) {
+// Update Todo by taskRef
+  void updateTodoByTaskRef(String taskRef, dynamic input) {
     int index = todoList.indexWhere((todo) => todo.taskRef == taskRef);
     if (index != -1) {
       Todo foundTodo = todoList[index];
@@ -265,8 +381,11 @@ class _TodoListPageState extends State<TodoListPage> {
 
       // Update fields in foundTodo
       foundTodo.closed = true;
-      foundTodo.answerData['taskActionComments'] = comments;
-      foundTodo.answerData['actionDate'] = DateTime.now().toString();
+
+      // Handle comment tasks
+      foundTodo.answerData['taskActionComments'] = input; // string comments
+
+      foundTodo.answerData['actionDate'] = DateTime.now().toIso8601String();
       todoList[index] = foundTodo;
       saveTodoListToFile(foundTodo); // Save the updated todo to file
     } else {
@@ -293,12 +412,16 @@ class _TodoListPageState extends State<TodoListPage> {
 
   Future<void> updateDataToAPI() async {
     String host = '$APIEndpoint/tasks/update';
+
+    final jsonData = await readDataFromFile();
+
+    final filteredData =
+        jsonData.where((item) => item['closed'] == true).toList();
+
+    // Show confirmation dialog before proceeding
+    bool? proceed = await _showConfirmationDialog(filteredData.length);
+
     try {
-      final jsonData = await readDataFromFile();
-
-      final filteredData =
-          jsonData.where((item) => item['closed'] == true).toList();
-
       if (filteredData.isEmpty) {
         // Show a SnackBar indicating there is no data to post
         ScaffoldMessenger.of(context).showSnackBar(
@@ -316,30 +439,73 @@ class _TodoListPageState extends State<TodoListPage> {
         return; // Exit the method if there is no data to post
       }
 
-      // Extract the required fields and create JSON data for the POST request
-      final postData = filteredData.map((item) {
-        return {
-          'taskRef': item['taskRef'],
-          'answerData': item['answerData'],
-        };
-      }).toList();
+      print('Ready to POST ${filteredData.length} records');
+      if (proceed == true) {
+        // Extract the required fields and create JSON data for the POST request
+        final postData = filteredData.map((item) {
+          return {
+            'taskRef': item['taskRef'],
+            'answerData': item['answerData'],
+          };
+        }).toList();
 
-      // Make the POST request to your API endpoint
-      final response = await http.post(
-        Uri.parse(host), // Replace with your API endpoint
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(postData),
-      );
+        // Make the POST request to your API endpoint
+        final response = await http.post(
+          Uri.parse(host),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(postData),
+        );
 
-      if (response.statusCode == 200) {
-        print('Data updated to API successfully');
-        // Optionally, perform any UI update or action after successful update
+        if (response.statusCode == 200) {
+          print('Data updated to API successfully');
+          // Optionally, perform any UI update or action after successful update
+          //fetchTodoList(); // Get more tasks once an update happens
+
+          // If successful, remove the closed tasks locally
+          final updatedData =
+              jsonData.where((item) => item['closed'] == false).toList();
+          await saveDataToFile(updatedData);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Tasks updated and deleted locally!')),
+          );
+        } else {
+          throw Exception(
+              'Failed to update data to API: ${response.statusCode}');
+        }
       } else {
-        throw Exception('Failed to update data to API: ${response.statusCode}');
+        print('Failed to update data to api');
       }
     } catch (e) {
       print('Error updating data to API: $e');
     }
+  }
+
+  Future<bool?> _showConfirmationDialog(int updateSize) {
+    return showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirm Action'),
+          content:
+              Text('You are about to update ${updateSize} resolved tasks?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false); // User clicked Cancel
+              },
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(true); // User clicked Proceed
+              },
+              child: const Text('Proceed'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   // Load data from file
@@ -365,7 +531,8 @@ class _TodoListPageState extends State<TodoListPage> {
 
 class TodoCard extends StatefulWidget {
   final Todo todo;
-  final Function(String, String) updateTodoCallback; // Modified callback
+  final Function(String, dynamic)
+      updateTodoCallback; // Modify callback to accept dynamic
 
   const TodoCard({
     required this.todo,
@@ -378,25 +545,39 @@ class TodoCard extends StatefulWidget {
 
 class _TodoCardState extends State<TodoCard> {
   TextEditingController textEditingController = TextEditingController();
-  bool showTextInput = false;
+  bool showInput = false;
   bool commentsSubmitted = false; // Track if comments are submitted
+
+  // Variables for Yes/No selection
+  String? selectedOption;
 
   @override
   void initState() {
     super.initState();
-    // Initialize textEditingController with empty text
     textEditingController.text = '';
   }
 
   @override
   void dispose() {
-    // Dispose textEditingController when the widget is disposed
     textEditingController.dispose();
     super.dispose();
   }
 
+  bool isYesNoTask(int taskType) {
+    return taskType == 2 || taskType == 3 || taskType == 6 || taskType == 10;
+  }
+
   @override
   Widget build(BuildContext context) {
+    int taskType;
+    try {
+      taskType = int.parse(widget.todo.taskType);
+    } catch (e) {
+      taskType = -1; // Default or handle error
+    }
+
+    bool yesNo = isYesNoTask(taskType);
+
     return Visibility(
       visible: !commentsSubmitted, // Hide the card if comments are submitted
       child: Card(
@@ -423,61 +604,157 @@ class _TodoCardState extends State<TodoCard> {
                 ),
               ),
               const SizedBox(height: 8),
-              if (!showTextInput) // Show "Done" button if comments not open
+              if (!showInput)
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      showTextInput = true;
-                      // Clear the text field when showing input
+                      showInput = true;
+                      selectedOption = null; // Reset selection
                       textEditingController.text = '';
                       commentsSubmitted = false;
                     });
                   },
                   child: const Text('Done'),
                 ),
-              if (showTextInput)
-                TextField(
-                  controller: textEditingController,
-                  decoration: InputDecoration(
-                    labelText: 'Comments',
-                    border: OutlineInputBorder(
-                      borderSide: commentsSubmitted &&
-                              textEditingController.text.isEmpty
-                          ? BorderSide(
-                              color: Colors
-                                  .red) // Red border if comments not added
-                          : BorderSide(), // Default border
+              if (showInput && yesNo)
+                Column(
+                  children: [
+                    // Task type 2 or 3: Health related options
+                    if (taskType == 2 || taskType == 3) ...[
+                      RadioListTile<String>(
+                        title: const Text('Health Okay'),
+                        value: 'YES',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Health Not Okay'),
+                        value: 'NO',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                    ],
+                    // Task type 6: Pregnancy related options
+                    if (taskType == 6) ...[
+                      RadioListTile<String>(
+                        title: const Text('Pregnancy Confirmed'),
+                        value: 'YES',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('Pregnancy Not Confirmed'),
+                        value: 'NO',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                    ],
+                    if (taskType == 10) ...[
+                      RadioListTile<String>(
+                        title: const Text('Yes'),
+                        value: 'YES',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                      RadioListTile<String>(
+                        title: const Text('No'),
+                        value: 'NO',
+                        groupValue: selectedOption,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedOption = value;
+                          });
+                        },
+                      ),
+                    ],
+                    ElevatedButton(
+                      onPressed: () {
+                        if (selectedOption == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please select an option.'),
+                            ),
+                          );
+                        } else {
+                          // Pass the selected option string directly
+                          widget.updateTodoCallback(
+                              widget.todo.taskRef, selectedOption);
+                          setState(() {
+                            commentsSubmitted = true;
+                            showInput = false;
+                          });
+                        }
+                      },
+                      child: const Text('Submit'),
                     ),
-                  ),
+                  ],
                 ),
-              if (showTextInput)
-                ElevatedButton(
-                  onPressed: () {
-                    if (textEditingController.text.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Please add comments.'),
+              if (showInput && !yesNo)
+                Column(
+                  children: [
+                    TextField(
+                      controller: textEditingController,
+                      decoration: InputDecoration(
+                        labelText: 'Comments',
+                        border: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: commentsSubmitted &&
+                                    textEditingController.text.isEmpty
+                                ? Colors.red
+                                : Colors.grey,
+                          ),
                         ),
-                      );
-                    } else {
-                      // Call the callback provided by the parent widget to update todo
-                      widget.updateTodoCallback(
-                        widget.todo.taskRef,
-                        textEditingController.text,
-                      );
-                      setState(() {
-                        commentsSubmitted = true;
-                        showTextInput = false;
-                      });
-                    }
-                  },
-                  child: const Text('Submit'),
+                      ),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (textEditingController.text.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please add comments.'),
+                            ),
+                          );
+                        } else {
+                          // Call the callback provided by the parent widget to update todo
+                          widget.updateTodoCallback(
+                            widget.todo.taskRef,
+                            textEditingController.text,
+                          );
+                          setState(() {
+                            commentsSubmitted = true;
+                            showInput = false;
+                          });
+                        }
+                      },
+                      child: const Text('Submit'),
+                    ),
+                  ],
                 ),
-              if (commentsSubmitted) // Always show the "Done" button
+              if (commentsSubmitted)
                 ElevatedButton(
                   onPressed: () {
                     setState(() {
-                      showTextInput = false; // Hide the input field
+                      showInput = false; // Hide the input field
                       commentsSubmitted = false; // Reset commentsSubmitted
                     });
                   },

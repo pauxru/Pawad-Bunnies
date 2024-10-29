@@ -6,15 +6,24 @@ import 'package:test_drive/new_rabbit.dart';
 import 'package:test_drive/ToDoPage.dart';
 import 'package:test_drive/rabbit_details_page.dart';
 import 'package:test_drive/profile.dart';
+import 'package:test_drive/AppConfig.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:intl/intl.dart';
 
-void main() {
-  //await dotenv.load(fileName: ".env");
-  //WidgetsFlutterBinding.ensureInitialized();
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: ".env");
+    AppConfig().API_ENDPOINT_GLOBAL = dotenv.env['API_ENDPOINT'] ??
+        'http://pawadtech.one:8080'; // Initialize the global variable
+    print('Loaded .env file successfully');
+  } catch (e) {
+    print('Error loading .env file: $e');
+  }
+
   runApp(const MyApp());
 }
 
@@ -128,10 +137,16 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<int> loadRabbits_API(int localSize) async {
     int serverSize = 0;
+    print('Here at loadRabbits_API');
     try {
       // Define the API endpoint URL
-      final String apiUrl = 'http://pawadtech.one:8080/api/rabbits';
+      final String apiUrl = '${AppConfig().API_ENDPOINT_GLOBAL}/api/rabbits';
       print('Getting Rabbits from: $apiUrl');
+
+      if (apiUrl.isEmpty || !(Uri.parse(apiUrl).isAbsolute)) {
+        print('Invalid API URL: $apiUrl');
+        return -1; // or handle the error appropriately
+      }
 
       // Make the HTTP GET request to the API
       final http.Response response = await http.get(Uri.parse(apiUrl));

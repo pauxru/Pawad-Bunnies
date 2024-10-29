@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:test_drive/AppConfig.dart';
 
 class ApiHandler {
-  String host = "http://pawadtech.one:8080";
+  String host = AppConfig().API_ENDPOINT_GLOBAL;
   //static const String host = '${dotenv.env['API_ENDPOINT']}';
 
   Future<void> APIping() async {
