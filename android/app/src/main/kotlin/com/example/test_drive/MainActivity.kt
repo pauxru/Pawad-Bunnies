@@ -1,4 +1,4 @@
-package com.example.test_drive
+package com.example.pawad_bunnies
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,11 +1,11 @@
-class AppConfig {
-  static final AppConfig _instance = AppConfig._internal();
+// class AppConfig {
+//   static final AppConfig _instance = AppConfig._internal();
 
-  factory AppConfig() {
-    return _instance;
-  }
+//   factory AppConfig() {
+//     return _instance;
+//   }
 
-  AppConfig._internal();
+//   AppConfig._internal();
 
-  String API_ENDPOINT_GLOBAL = ''; // Declare your variable here
-}
+//   String API_ENDPOINT_GLOBAL = ''; // Declare your variable here
+// }

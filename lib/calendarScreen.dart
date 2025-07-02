@@ -3,6 +3,8 @@ import 'package:table_calendar/table_calendar.dart';
 import 'package:intl/intl.dart';
 
 class CalendarScreen extends StatefulWidget {
+  const CalendarScreen({super.key});
+
   @override
   _CalendarScreenState createState() => _CalendarScreenState();
 }
@@ -16,7 +18,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Select Date'),
+        title: const Text('Select Date'),
       ),
       body: Center(
         child: Column(
@@ -41,7 +43,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   _calendarFormat = format;
                 });
               },
-              calendarStyle: CalendarStyle(
+              calendarStyle: const CalendarStyle(
                 todayDecoration: BoxDecoration(
                   color: Colors.blueAccent,
                   shape: BoxShape.circle,
@@ -53,7 +55,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                 markersMaxCount: 1,
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Text(
                 'Selected Date: ${DateFormat('yyyy-MM-dd').format(_selectedDay)}'),
           ],
