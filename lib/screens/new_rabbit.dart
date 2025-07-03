@@ -1,8 +1,11 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:test_drive/services/image_upload_service.dart';
 import '../services/rabbit_api_service.dart';
 import '../models/rabbit.dart';
+import '../widgets/image_capture_uploader.dart';
 
 class NewRabbitPage extends StatefulWidget {
   const NewRabbitPage({super.key});
@@ -13,6 +16,7 @@ class NewRabbitPage extends StatefulWidget {
 
 class _NewRabbitPageState extends State<NewRabbitPage> {
   final RabbitApiService apiHandler = RabbitApiService();
+  final ImageUploadService imageUploadService = ImageUploadService();
 
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _tagNoController = TextEditingController();
@@ -30,6 +34,7 @@ class _NewRabbitPageState extends State<NewRabbitPage> {
   String? _selectedSex;
   String? _selectedBreed;
   DateTime? _selectedDate;
+  File? _rabbitImage;
 
   final List<String> _rabbitBreeds = [
     'Flemish Giant rabbit',
@@ -66,6 +71,18 @@ class _NewRabbitPageState extends State<NewRabbitPage> {
     return;
   }
 
+  String? uploadedImageName;
+  if (_rabbitImage != null) {
+    try {
+      uploadedImageName = await imageUploadService.uploadImage(_rabbitImage!);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Image upload failed: $e")),
+      );
+      return;
+    }
+  }
+
   final rabbit = Rabbit(
     tagNo: _tagNoController.text.trim(),
     birthday: _selectedDate,
@@ -79,9 +96,7 @@ class _NewRabbitPageState extends State<NewRabbitPage> {
     weight: _weightController.text.trim(),
     priceSold: _priceSoldController.text.trim(),
     cage: _cageController.text.trim(),
-    images: _imagesController.text.trim().isNotEmpty
-        ? _imagesController.text.trim().split(',').map((e) => e.trim()).toList()
-        : [],
+    images: uploadedImageName != null ? [uploadedImageName] : [],
   );
 
   final response = await apiHandler.createRabbit(rabbit, null);
@@ -167,29 +182,38 @@ class _NewRabbitPageState extends State<NewRabbitPage> {
           child: SingleChildScrollView(
             child: Column(
               children: [
+                ImageCaptureWidget(
+                  onImageSelected: (file) {
+                    setState(() {
+                      _rabbitImage = file;
+                    });
+                  },
+                ),
                 _buildTextField("Tag No", _tagNoController),
+                _buildDatePicker(),
                 _buildDropdown(
                   label: "Breed",
                   value: _selectedBreed,
                   items: _rabbitBreeds,
                   onChanged: (val) => setState(() => _selectedBreed = val),
                 ),
-                _buildTextField("Mother", _motherController),
-                _buildTextField("Father", _fatherController),
                 _buildDropdown(
                   label: "Sex",
                   value: _selectedSex,
                   items: ['Male', 'Female'],
                   onChanged: (val) => setState(() => _selectedSex = val),
                 ),
+                _buildTextField("Mother", _motherController),
+                _buildTextField("Father", _fatherController),
+                
                 _buildTextField("Origin", _originController, required: false),
                 _buildTextField("Diseases", _diseasesController, required: false),
                 _buildTextField("Comments", _commentsController),
                 _buildTextField("Weight", _weightController, required: false),
                 _buildTextField("Price Sold", _priceSoldController, required: false),
-                _buildTextField("Cage", _cageController),
-                _buildTextField("Images", _imagesController, required: false),
-                _buildDatePicker(),
+                
+                //_buildTextField("Images", _imagesController, required: false),
+                
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _submitForm,
